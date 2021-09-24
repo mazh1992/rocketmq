@@ -115,8 +115,10 @@ public class RouteInfoManager {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+                // 获取写锁
                 this.lock.writeLock().lockInterruptibly();
 
+                // 查看集群是否存在，没有创建
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
@@ -126,8 +128,9 @@ public class RouteInfoManager {
 
                 boolean registerFirst = false;
 
+                // 获取brokerData
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
-                if (null == brokerData) {
+                if (null == brokerData) { // 不存在，设置registerFirst = true,并新增
                     registerFirst = true;
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
@@ -138,6 +141,7 @@ public class RouteInfoManager {
                 Iterator<Entry<Long, String>> it = brokerAddrsMap.entrySet().iterator();
                 while (it.hasNext()) {
                     Entry<Long, String> item = it.next();
+                     // 更新 主 从
                     if (null != brokerAddr && brokerAddr.equals(item.getValue()) && brokerId != item.getKey()) {
                         it.remove();
                     }
@@ -146,20 +150,23 @@ public class RouteInfoManager {
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
                 registerFirst = registerFirst || (null == oldAddr);
 
+                // Topic 配置信息不为空，且是master时
                 if (null != topicConfigWrapper
                     && MixAll.MASTER_ID == brokerId) {
+                    // Broker Topic信息发生变化 或者第一次注册
                     if (this.isBrokerTopicConfigChanged(brokerAddr, topicConfigWrapper.getDataVersion())
                         || registerFirst) {
                         ConcurrentMap<String, TopicConfig> tcTable =
                             topicConfigWrapper.getTopicConfigTable();
                         if (tcTable != null) {
                             for (Map.Entry<String, TopicConfig> entry : tcTable.entrySet()) {
-                                this.createAndUpdateQueueData(brokerName, entry.getValue());
+                                this.createAndUpdateQueueData(brokerName, entry.getValue()); // 更新Topic信息
                             }
                         }
                     }
                 }
 
+                // 更新 brokerLive, 相同的覆盖，没有的新增，就叫更新 ^_^
                 BrokerLiveInfo prevBrokerLiveInfo = this.brokerLiveTable.put(brokerAddr,
                     new BrokerLiveInfo(
                         System.currentTimeMillis(),
@@ -178,17 +185,22 @@ public class RouteInfoManager {
                     }
                 }
 
+                // 不是主节点
                 if (MixAll.MASTER_ID != brokerId) {
+                    // 找主节点
                     String masterAddr = brokerData.getBrokerAddrs().get(MixAll.MASTER_ID);
                     if (masterAddr != null) {
+
                         BrokerLiveInfo brokerLiveInfo = this.brokerLiveTable.get(masterAddr);
                         if (brokerLiveInfo != null) {
+                            // 将主节点信息响应回去
                             result.setHaServerAddr(brokerLiveInfo.getHaServerAddr());
                             result.setMasterAddr(masterAddr);
                         }
                     }
                 }
             } finally {
+                // 释放锁
                 this.lock.writeLock().unlock();
             }
         } catch (Exception e) {
@@ -226,6 +238,7 @@ public class RouteInfoManager {
         queueData.setPerm(topicConfig.getPerm());
         queueData.setTopicSysFlag(topicConfig.getTopicSysFlag());
 
+        // topic不存在，创建一个
         List<QueueData> queueDataList = this.topicQueueTable.get(topicConfig.getTopicName());
         if (null == queueDataList) {
             queueDataList = new LinkedList<QueueData>();
@@ -239,9 +252,9 @@ public class RouteInfoManager {
             while (it.hasNext()) {
                 QueueData qd = it.next();
                 if (qd.getBrokerName().equals(brokerName)) {
-                    if (qd.equals(queueData)) {
+                    if (qd.equals(queueData)) { // 相等不更新
                         addNewOne = false;
-                    } else {
+                    } else { // 不相等删掉旧的，再添加新的
                         log.info("topic changed, {} OLD: {} NEW: {}", topicConfig.getTopicName(), qd,
                             queueData);
                         it.remove();
@@ -455,6 +468,7 @@ public class RouteInfoManager {
                         this.brokerLiveTable.entrySet().iterator();
                     while (itBrokerLiveTable.hasNext()) {
                         Entry<String, BrokerLiveInfo> entry = itBrokerLiveTable.next();
+                        // 找出需要移出的
                         if (entry.getValue().getChannel() == channel) {
                             brokerAddrFound = entry.getKey();
                             break;
@@ -471,6 +485,7 @@ public class RouteInfoManager {
         if (null == brokerAddrFound) {
             brokerAddrFound = remoteAddr;
         } else {
+            // 已经移出了
             log.info("the broker's channel destroyed, {}, clean it's data structure at once", brokerAddrFound);
         }
 
