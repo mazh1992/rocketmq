@@ -45,15 +45,19 @@ import org.apache.rocketmq.common.protocol.route.TopicRouteData;
 import org.apache.rocketmq.common.sysflag.TopicSysFlag;
 import org.apache.rocketmq.remoting.common.RemotingUtil;
 
+/**
+ * RocketMq 控制台的数据来源
+ * 核心数据信息
+ */
 public class RouteInfoManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
-    private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
-    private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
-    private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
-    private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
-    private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
+    private final HashMap<String/* topic */, List<QueueData>> topicQueueTable; // Topic消息队列路由信息，消息发送时根据路由表进行路由
+    private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable; // Broker基础信息
+    private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable; // 集群
+    private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable; // Broker状态信息，NameServer每次收到心跳包，会替换该信息
+    private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable; // 过滤器列表
 
     public RouteInfoManager() {
         this.topicQueueTable = new HashMap<String, List<QueueData>>(1024);
@@ -753,8 +757,9 @@ public class RouteInfoManager {
     }
 }
 
+// broker 存活信息
 class BrokerLiveInfo {
-    private long lastUpdateTimestamp;
+    private long lastUpdateTimestamp; // 最后更新时间，30秒一次心跳，2分钟无更新，则自动认为该Broker已下线
     private DataVersion dataVersion;
     private Channel channel;
     private String haServerAddr;

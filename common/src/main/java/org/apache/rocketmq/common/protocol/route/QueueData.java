@@ -20,6 +20,10 @@
  */
 package org.apache.rocketmq.common.protocol.route;
 
+/**
+ * 队列详情，这也是控制台，为什么配置一个NameSrv地址，就能看到队列的详情的原因
+ * 一个Topic拥有多个消息队列，一个Broker为每一主体默认创建4个读队列，4个写队列
+ */
 public class QueueData implements Comparable<QueueData> {
     private String brokerName;
     private int readQueueNums;

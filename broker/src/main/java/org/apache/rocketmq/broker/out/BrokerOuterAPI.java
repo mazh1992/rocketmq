@@ -123,7 +123,7 @@ public class BrokerOuterAPI {
         final boolean compressed) {
 
         final List<RegisterBrokerResult> registerBrokerResultList = new CopyOnWriteArrayList<>();
-        List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList();
+        List<String> nameServerAddressList = this.remotingClient.getNameServerAddressList(); // 获取NameSrv列表
         if (nameServerAddressList != null && nameServerAddressList.size() > 0) {
 
             final RegisterBrokerRequestHeader requestHeader = new RegisterBrokerRequestHeader();
@@ -140,7 +140,11 @@ public class BrokerOuterAPI {
             final byte[] body = requestBody.encode(compressed);
             final int bodyCrc32 = UtilAll.crc32(body);
             requestHeader.setBodyCrc32(bodyCrc32);
+
+            // 多线程用计时器
             final CountDownLatch countDownLatch = new CountDownLatch(nameServerAddressList.size());
+
+            // 开启多个线程同步去每个NameSrv注册
             for (final String namesrvAddr : nameServerAddressList) {
                 brokerOuterExecutor.execute(new Runnable() {
                     @Override
@@ -155,6 +159,7 @@ public class BrokerOuterAPI {
                         } catch (Exception e) {
                             log.warn("registerBroker Exception, {}", namesrvAddr, e);
                         } finally {
+                            // 注册一个 计时器减一
                             countDownLatch.countDown();
                         }
                     }
@@ -162,6 +167,7 @@ public class BrokerOuterAPI {
             }
 
             try {
+                // 等待计时器清零
                 countDownLatch.await(timeoutMills, TimeUnit.MILLISECONDS);
             } catch (InterruptedException e) {
             }
@@ -190,6 +196,7 @@ public class BrokerOuterAPI {
             return null;
         }
 
+        // 发送心跳包
         RemotingCommand response = this.remotingClient.invokeSync(namesrvAddr, request, timeoutMills);
         assert response != null;
         switch (response.getCode()) {
@@ -197,7 +204,7 @@ public class BrokerOuterAPI {
                 RegisterBrokerResponseHeader responseHeader =
                     (RegisterBrokerResponseHeader) response.decodeCommandCustomHeader(RegisterBrokerResponseHeader.class);
                 RegisterBrokerResult result = new RegisterBrokerResult();
-                result.setMasterAddr(responseHeader.getMasterAddr());
+                result.setMasterAddr(responseHeader.getMasterAddr()); // broker的master是NameSrv响应回来的？？应该是有一套选举机制，继续看后面有没有
                 result.setHaServerAddr(responseHeader.getHaServerAddr());
                 if (response.getBody() != null) {
                     result.setKvTable(KVTable.decode(response.getBody(), KVTable.class));

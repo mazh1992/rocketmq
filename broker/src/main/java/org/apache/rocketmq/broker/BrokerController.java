@@ -887,8 +887,8 @@ public class BrokerController {
             this.registerBrokerAll(true, false, true);
         }
 
+        // Broker端发送心跳包 心跳间隔时间可配置，10秒到60秒之间，（之前是固定的30秒）
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-
             @Override
             public void run() {
                 try {
@@ -954,25 +954,29 @@ public class BrokerController {
 
     private void doRegisterBrokerAll(boolean checkOrderConfig, boolean oneway,
         TopicConfigSerializeWrapper topicConfigWrapper) {
+
+        // 向所有的NameSrv注册Broke
         List<RegisterBrokerResult> registerBrokerResultList = this.brokerOuterAPI.registerBrokerAll(
             this.brokerConfig.getBrokerClusterName(),
             this.getBrokerAddr(),
             this.brokerConfig.getBrokerName(),
-            this.brokerConfig.getBrokerId(),
-            this.getHAServerAddr(),
+            this.brokerConfig.getBrokerId(), // 默认就是0
+            this.getHAServerAddr(), // 当前Brock的IP + 端口
             topicConfigWrapper,
             this.filterServerManager.buildNewFilterServerList(),
             oneway,
             this.brokerConfig.getRegisterBrokerTimeoutMills(),
             this.brokerConfig.isCompressedRegister());
 
+        // 注册结果大于0，
         if (registerBrokerResultList.size() > 0) {
+            // master是NameSrv响应回来的，
             RegisterBrokerResult registerBrokerResult = registerBrokerResultList.get(0);
             if (registerBrokerResult != null) {
                 if (this.updateMasterHAServerAddrPeriodically && registerBrokerResult.getHaServerAddr() != null) {
+                    // 设置 Master的地址，如果变动就更新
                     this.messageStore.updateHaMasterAddress(registerBrokerResult.getHaServerAddr());
                 }
-
                 this.slaveSynchronize.setMasterAddr(registerBrokerResult.getMasterAddr());
 
                 if (checkOrderConfig) {
