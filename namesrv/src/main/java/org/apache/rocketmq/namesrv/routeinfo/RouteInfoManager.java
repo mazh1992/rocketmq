@@ -431,9 +431,10 @@ public class RouteInfoManager {
         while (it.hasNext()) {
             Entry<String, BrokerLiveInfo> next = it.next();
             long last = next.getValue().getLastUpdateTimestamp();
+            // 最后更新时间，超过2分钟
             if ((last + BROKER_CHANNEL_EXPIRED_TIME) < System.currentTimeMillis()) {
-                RemotingUtil.closeChannel(next.getValue().getChannel());
-                it.remove();
+                RemotingUtil.closeChannel(next.getValue().getChannel()); // 通道关闭
+                it.remove(); // broker 移除
                 log.warn("The broker channel expired, {} {}ms", next.getKey(), BROKER_CHANNEL_EXPIRED_TIME);
                 this.onChannelDestroy(next.getKey(), next.getValue().getChannel());
             }

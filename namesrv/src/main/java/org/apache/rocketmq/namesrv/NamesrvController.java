@@ -77,34 +77,38 @@ public class NamesrvController {
 
         this.kvConfigManager.load();
 
+        // 创建Netty，等这个看完，Netty，也一定要看下源码
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
 
+        // 创建业务线程
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
         this.registerProcessor();
 
+        // 创建一个定时任务，每10秒执行一次，扫描不存活的Broker
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-
             @Override
             public void run() {
                 NamesrvController.this.routeInfoManager.scanNotActiveBroker();
             }
         }, 5, 10, TimeUnit.SECONDS);
 
+        // 创建一个定时任务，每10分钟执行一次，打印KV配置， KV配置暂时还不知道啥用，等后面再 看看
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
-
             @Override
             public void run() {
                 NamesrvController.this.kvConfigManager.printAllPeriodically();
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        // 加载TLS MQ还值当的上 TLS ？
         if (TlsSystemConfig.tlsMode != TlsMode.DISABLED) {
             // Register a listener to reload SslContext
             try {
                 fileWatchService = new FileWatchService(
                     new String[] {
+                            // tls 证书
                         TlsSystemConfig.tlsServerCertPath,
                         TlsSystemConfig.tlsServerKeyPath,
                         TlsSystemConfig.tlsServerTrustCertPath

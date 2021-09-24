@@ -17,6 +17,8 @@
 package org.apache.rocketmq.example.quickstart;
 
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+
 import org.apache.rocketmq.client.consumer.DefaultMQPushConsumer;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyContext;
 import org.apache.rocketmq.client.consumer.listener.ConsumeConcurrentlyStatus;
@@ -36,18 +38,8 @@ public class Consumer {
          * Instantiate with specified consumer group name.
          */
         DefaultMQPushConsumer consumer = new DefaultMQPushConsumer("please_rename_unique_group_name_4");
-
-        /*
-         * Specify name server addresses.
-         * <p/>
-         *
-         * Alternatively, you may specify name server addresses via exporting environmental variable: NAMESRV_ADDR
-         * <pre>
-         * {@code
-         * consumer.setNamesrvAddr("name-server1-ip:9876;name-server2-ip:9876");
-         * }
-         * </pre>
-         */
+        consumer.setNamesrvAddr ("127.0.0.1:9876");
+        CountDownLatch cdl = new CountDownLatch(1);
 
         /*
          * Specify where to start in case the specified consumer group is a brand new one.
@@ -76,7 +68,7 @@ public class Consumer {
          *  Launch the consumer instance.
          */
         consumer.start();
-
+        cdl.await();
         System.out.printf("Consumer Started.%n");
     }
 }

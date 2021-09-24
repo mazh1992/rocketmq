@@ -101,6 +101,7 @@ public class BrokerStartup {
         try {
             //PackageConflictDetect.detectFastjson();
             Options options = ServerUtil.buildCommandlineOptions(new Options());
+            // 读命令的 命令启动时，nohup sh bin/mqbroker -c conf/broker.conf  -n 127.0.0.1:9876 &
             commandLine = ServerUtil.parseCmdLine("mqbroker", args, buildCommandlineOptions(options),
                 new PosixParser());
             if (null == commandLine) {
@@ -121,8 +122,10 @@ public class BrokerStartup {
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
 
-            if (commandLine.hasOption('c')) {
-                String file = commandLine.getOptionValue('c');
+            // 本地测试，我就不读了，写死
+            //if (commandLine.hasOption('c')) {
+                //String file = commandLine.getOptionValue('c');
+                String file = "/Users/mazhenhua/mazh/study/git/rocketMQ/conf/broker.conf";
                 if (file != null) {
                     configFile = file;
                     InputStream in = new BufferedInputStream(new FileInputStream(file));
@@ -138,7 +141,7 @@ public class BrokerStartup {
                     BrokerPathConfigHelper.setBrokerConfigPath(file);
                     in.close();
                 }
-            }
+            //}
 
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), brokerConfig);
 

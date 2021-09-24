@@ -81,13 +81,15 @@ public class NamesrvStartup {
 
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
-        nettyServerConfig.setListenPort(9876);
+        nettyServerConfig.setListenPort(9876); // 默认监听9876，可以通过配置文件配置，如果配置了，会在下面覆盖掉
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {
+                // 读配置文件
                 InputStream in = new BufferedInputStream(new FileInputStream(file));
                 properties = new Properties();
                 properties.load(in);
+                // 将配置文件中配置了相同属性的，通过反射set进去
                 MixAll.properties2Object(properties, namesrvConfig);
                 MixAll.properties2Object(properties, nettyServerConfig);
 
@@ -143,6 +145,7 @@ public class NamesrvStartup {
             System.exit(-3);
         }
 
+        // JVM钩子函数，停机钩子函数，停机的时候，会调用，用来释放资源，优雅停机
         Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
             @Override
             public Void call() throws Exception {
@@ -151,6 +154,7 @@ public class NamesrvStartup {
             }
         }));
 
+        // 开启服务 Netty监听
         controller.start();
 
         return controller;
