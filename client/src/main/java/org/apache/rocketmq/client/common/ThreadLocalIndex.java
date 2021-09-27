@@ -17,11 +17,19 @@
 
 package org.apache.rocketmq.client.common;
 
+import org.apache.rocketmq.client.latency.MQFaultStrategy;
+
 import java.util.Random;
 
 public class ThreadLocalIndex {
     private final ThreadLocal<Integer> threadLocalIndex = new ThreadLocal<Integer>();
     private final Random random = new Random();
+
+    /**
+     * 随机选择一个，然后开始递增，线程所有，啥意思呢，就是发送消息时，随机选择一个通道，递增取模就是从当前开始，往下循环找（根据重试次数）
+     * @see MQFaultStrategy#selectOneMessageQueue(org.apache.rocketmq.client.impl.producer.TopicPublishInfo, java.lang.String)
+     * @return
+     */
 
     public int incrementAndGet() {
         Integer index = this.threadLocalIndex.get();

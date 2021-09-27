@@ -98,6 +98,8 @@ public class ClientConfig {
         }
     }
 
+
+    // 检查资源，比如，productGroup, Topic等，是否符合要求
     public String withNamespace(String resource) {
         return NamespaceUtil.wrapNamespace(this.getNamespace(), resource);
     }

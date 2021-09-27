@@ -74,22 +74,23 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     private String producerGroup;
 
     /**
-     * Just for testing or demo program
+     * Just for testing or demo program 默认的topic 用来测试的
      */
     private String createTopicKey = TopicValidator.AUTO_CREATE_TOPIC_KEY_TOPIC;
 
     /**
-     * Number of queues to create per default topic.
+     * Number of queues to create per default topic. topic队列在每一个Broker的数量
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
-     * Timeout for sending messages.
+     * Timeout for sending messages. 默认超时时间
      */
     private int sendMsgTimeout = 3000;
 
     /**
      * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+     * 超过4K的消息体，将被压缩
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
@@ -97,6 +98,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      * Maximum number of retry to perform internally before claiming sending failure in synchronous mode. </p>
      *
      * This may potentially cause message duplication which is up to application developers to resolve.
+     * 重试2次，共3次，和dubbo一样的
      */
     private int retryTimesWhenSendFailed = 2;
 
@@ -273,6 +275,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
      */
     @Override
     public void start() throws MQClientException {
+        // 检查productGroup是否符合要求
         this.setProducerGroup(withNamespace(this.producerGroup));
         this.defaultMQProducerImpl.start();
         if (null != traceDispatcher) {

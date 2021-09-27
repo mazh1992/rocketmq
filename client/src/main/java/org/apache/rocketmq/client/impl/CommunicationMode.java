@@ -17,7 +17,7 @@
 package org.apache.rocketmq.client.impl;
 
 public enum CommunicationMode {
-    SYNC,
-    ASYNC,
-    ONEWAY,
+    SYNC, // 同步 等发送的结果
+    ASYNC, // 异步 发了就走，结果通过callbak接口回调
+    ONEWAY, // 单向 只管发，不管结果
 }

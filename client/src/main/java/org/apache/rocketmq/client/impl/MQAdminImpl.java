@@ -83,6 +83,8 @@ public class MQAdminImpl {
         try {
             Validators.checkTopic(newTopic);
             Validators.isSystemTopic(newTopic);
+
+            // 从nameSrv中读需要的拥有topic的broker
             TopicRouteData topicRouteData = this.mQClientFactory.getMQClientAPIImpl().getTopicRouteInfoFromNameServer(key, timeoutMillis);
             List<BrokerData> brokerDataList = topicRouteData.getBrokerDatas();
             if (brokerDataList != null && !brokerDataList.isEmpty()) {
