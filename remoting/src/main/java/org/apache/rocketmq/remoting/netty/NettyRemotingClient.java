@@ -81,6 +81,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
 
+    // nameSrv地址列表
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
@@ -141,9 +142,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    /**
+     * 不知道这样写的用意是什么，是想生成一个，1到3位的随机数？
+     * 那为何不用r.nextInt(1000),
+     * @return
+     */
     private static int initValueIndex() {
         Random r = new Random();
-
         return Math.abs(r.nextInt() % 999) % 999;
     }
 
@@ -189,6 +194,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        // 每秒执行一次，扫描。Response表中，超时没有释放信号的
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -238,6 +244,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    // 关闭通道
     public void closeChannel(final String addr, final Channel channel) {
         if (null == channel)
             return;
@@ -362,6 +369,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+    // 远程调用
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
@@ -371,7 +379,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             try {
                 doBeforeRpcHooks(addr, request);
                 long costTime = System.currentTimeMillis() - beginStartTime;
-                if (timeoutMillis < costTime) {
+                if (timeoutMillis < costTime) { // 悲催的还没有远程请求就超时了
                     throw new RemotingTimeoutException("invokeSync call timeout");
                 }
                 RemotingCommand response = this.invokeSyncImpl(channel, request, timeoutMillis - costTime);
@@ -399,16 +407,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         if (null == addr) {
             return getAndCreateNameserverChannel();
         }
-
+        // 通道列表
         ChannelWrapper cw = this.channelTables.get(addr);
         if (cw != null && cw.isOK()) {
             return cw.getChannel();
         }
-
+        // 没有就创建一个
         return this.createChannel(addr);
     }
 
     private Channel getAndCreateNameserverChannel() throws RemotingConnectException, InterruptedException {
+        // 从已经选择过的集合中读取
         String addr = this.namesrvAddrChoosed.get();
         if (addr != null) {
             ChannelWrapper cw = this.channelTables.get(addr);
@@ -417,13 +426,16 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             }
         }
 
+        //获取nameSrv列表
         final List<String> addrList = this.namesrvAddrList.get();
+
+        // 加重入锁防止并发
         if (this.namesrvChannelLock.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
                 addr = this.namesrvAddrChoosed.get();
                 if (addr != null) {
                     ChannelWrapper cw = this.channelTables.get(addr);
-                    if (cw != null && cw.isOK()) {
+                    if (cw != null && cw.isOK()) { // 用过的，并且渠道还可以用的
                         return cw.getChannel();
                     }
                 }
@@ -431,10 +443,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 if (addrList != null && !addrList.isEmpty()) {
                     for (int i = 0; i < addrList.size(); i++) {
                         int index = this.namesrvIndex.incrementAndGet();
-                        index = Math.abs(index);
+                        index = Math.abs(index); // 负数取正，初始化的时候，已经有判断了，这里还写判断是不是多余
+                        // 取模，就是取余数，index / addrList.size() 后除掉整除之后的余数，结果肯定是一个小于或等于addrList.size()的数
+                        // 个人感觉 整段代码都在随机选择一个nameSrv，何不直接，new Random().nextInt(addrList.size())，直接就能出来
+                        // 如果说有什么权重啥的，因素考虑还可以理解，纯属浪费，也可能还有其他作用，还没有看到，等着被打脸。
                         index = index % addrList.size();
                         String newAddr = addrList.get(index);
-
                         this.namesrvAddrChoosed.set(newAddr);
                         log.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
                         Channel channelNew = this.createChannel(newAddr);
@@ -454,6 +468,8 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return null;
     }
 
+
+
     private Channel createChannel(final String addr) throws InterruptedException {
         ChannelWrapper cw = this.channelTables.get(addr);
         if (cw != null && cw.isOK()) {
@@ -469,20 +485,20 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                     if (cw.isOK()) {
                         return cw.getChannel();
                     } else if (!cw.getChannelFuture().isDone()) {
-                        createNewConnection = false;
+                        createNewConnection = false; // 停机不再创建
                     } else {
-                        this.channelTables.remove(addr);
+                        this.channelTables.remove(addr); // 先移出
                         createNewConnection = true;
                     }
                 } else {
                     createNewConnection = true;
                 }
 
-                if (createNewConnection) {
+                if (createNewConnection) { // 创建一个新的链接
                     ChannelFuture channelFuture = this.bootstrap.connect(RemotingHelper.string2SocketAddress(addr));
                     log.info("createChannel: begin to connect remote host[{}] asynchronously", addr);
                     cw = new ChannelWrapper(channelFuture);
-                    this.channelTables.put(addr, cw);
+                    this.channelTables.put(addr, cw);// 并添加到通道列表
                 }
             } catch (Exception e) {
                 log.error("createChannel: create channel exception", e);
@@ -521,7 +537,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             try {
                 doBeforeRpcHooks(addr, request);
                 long costTime = System.currentTimeMillis() - beginStartTime;
-                if (timeoutMillis < costTime) {
+                if (timeoutMillis < costTime) { // 这么喜欢超时吗，一条线请求下来，到处都在判断有没有超时
                     throw new RemotingTooMuchRequestException("invokeAsync call timeout");
                 }
                 this.invokeAsyncImpl(channel, request, timeoutMillis - costTime, invokeCallback);

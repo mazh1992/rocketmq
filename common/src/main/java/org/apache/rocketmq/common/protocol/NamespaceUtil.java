@@ -86,6 +86,7 @@ public class NamespaceUtil {
             return resourceWithOutNamespace;
         }
 
+        // 判断是不是系统资源，
         if (isSystemResource(resourceWithOutNamespace) || isAlreadyWithNamespace(resourceWithOutNamespace, namespace)) {
             return resourceWithOutNamespace;
         }
@@ -140,10 +141,12 @@ public class NamespaceUtil {
         if (StringUtils.isEmpty(originalResource)) {
             return STRING_BLANK;
         }
+        // 重试的topic ，自动截断前缀
         if (isRetryTopic(originalResource)) {
             return originalResource.substring(RETRY_PREFIX_LENGTH);
         }
 
+        // DLQ topic 截断，暂时还不知道啥意思，后续再看看
         if (isDLQTopic(originalResource)) {
             return originalResource.substring(DLQ_PREFIX_LENGTH);
         }

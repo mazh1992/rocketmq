@@ -850,11 +850,11 @@ public class BrokerController {
 
     public void start() throws Exception {
         if (this.messageStore != null) {
-            this.messageStore.start();
+            this.messageStore.start(); // 消息存储
         }
 
         if (this.remotingServer != null) {
-            this.remotingServer.start();
+            this.remotingServer.start(); // Netty
         }
 
         if (this.fastRemotingServer != null) {

@@ -29,22 +29,26 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.apache.rocketmq.logging.InternalLogger;
 import org.apache.rocketmq.logging.InternalLoggerFactory;
 
+/**
+ *  相当于{ROCKET_HOME}/store/commitlog 文件夹
+ */
 public class MappedFileQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
-    private final String storePath;
+    private final String storePath; // 存储目录
 
-    private final int mappedFileSize;
+    private final int mappedFileSize; // 单个文件存储大小 默认1个G
 
+    // 文件夹下的文件
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     private final AllocateMappedFileService allocateMappedFileService;
 
-    private long flushedWhere = 0;
-    private long committedWhere = 0;
+    private long flushedWhere = 0; // 刷盘指针，指针前的都持久化了，
+    private long committedWhere = 0; // 当前数据指针，内存中byteBuffer当前的写指针，该值大于等于flushedWhere
 
     private volatile long storeTimestamp = 0;
 
@@ -74,6 +78,12 @@ public class MappedFileQueue {
         }
     }
 
+    /**
+     *  根据时间戳来查找文件，从第一个开始，找到第一个最后更新时间大于待查时间戳的文件（在这个时间点后更新的文件）
+     *  如果不存在返回最后一个
+     * @param timestamp
+     * @return
+     */
     public MappedFile getMappedFileByTime(final long timestamp) {
         Object[] mfs = this.copyMappedFiles(0);
 
@@ -285,6 +295,7 @@ public class MappedFileQueue {
         return true;
     }
 
+    // 获取第一个文件的(被删掉的去除)，初始偏移量
     public long getMinOffset() {
 
         if (!this.mappedFiles.isEmpty()) {
@@ -299,6 +310,7 @@ public class MappedFileQueue {
         return -1;
     }
 
+    // 最后一个文件的，偏移量 + 偏移的位置
     public long getMaxOffset() {
         MappedFile mappedFile = getLastMappedFile();
         if (mappedFile != null) {
@@ -454,7 +466,7 @@ public class MappedFileQueue {
 
     /**
      * Finds a mapped file by offset.
-     *
+     *  根据便宜两查找
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
      * @return Mapped file or null (when not found and returnFirstOnNotFound is <code>false</code>).
@@ -463,8 +475,8 @@ public class MappedFileQueue {
         try {
             MappedFile firstMappedFile = this.getFirstMappedFile();
             MappedFile lastMappedFile = this.getLastMappedFile();
-            if (firstMappedFile != null && lastMappedFile != null) {
-                if (offset < firstMappedFile.getFileFromOffset() || offset >= lastMappedFile.getFileFromOffset() + this.mappedFileSize) {
+            if (firstMappedFile != null && lastMappedFile != null) {// 首位都有
+                if (offset < firstMappedFile.getFileFromOffset() || offset >= lastMappedFile.getFileFromOffset() + this.mappedFileSize) {// 小于第一个，大于最后一个
                     LOG_ERROR.warn("Offset not matched. Request offset: {}, firstOffset: {}, lastOffset: {}, mappedFileSize: {}, mappedFiles count: {}",
                         offset,
                         firstMappedFile.getFileFromOffset(),
@@ -472,6 +484,7 @@ public class MappedFileQueue {
                         this.mappedFileSize,
                         this.mappedFiles.size());
                 } else {
+                    // 有的文件已经删掉了，所以要把那一部分的偏移量去掉
                     int index = (int) ((offset / this.mappedFileSize) - (firstMappedFile.getFileFromOffset() / this.mappedFileSize));
                     MappedFile targetFile = null;
                     try {

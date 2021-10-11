@@ -388,6 +388,7 @@ public class RouteInfoManager {
         }
     }
 
+    // 填充Topic路由数据
     public TopicRouteData pickupTopicRouteData(final String topic) {
         TopicRouteData topicRouteData = new TopicRouteData();
         boolean foundQueueData = false;

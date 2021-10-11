@@ -371,12 +371,12 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private PutMessageStatus checkMessages(MessageExtBatch messageExtBatch) {
-        if (messageExtBatch.getTopic().length() > Byte.MAX_VALUE) {
+        if (messageExtBatch.getTopic().length() > Byte.MAX_VALUE) { // topic 太长
             log.warn("putMessage message topic length too long " + messageExtBatch.getTopic().length());
             return PutMessageStatus.MESSAGE_ILLEGAL;
         }
 
-        if (messageExtBatch.getBody().length > messageStoreConfig.getMaxMessageSize()) {
+        if (messageExtBatch.getBody().length > messageStoreConfig.getMaxMessageSize()) { // 消息太大超过4M
             log.warn("PutMessages body length too long " + messageExtBatch.getBody().length);
             return PutMessageStatus.MESSAGE_ILLEGAL;
         }
@@ -385,12 +385,12 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private PutMessageStatus checkStoreStatus() {
-        if (this.shutdown) {
+        if (this.shutdown) { // 关机 broker停了
             log.warn("message store has shutdown, so putMessage is forbidden");
             return PutMessageStatus.SERVICE_NOT_AVAILABLE;
         }
 
-        if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
+        if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) { // 不是主broker，只有主的才可以，从的不支持写
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
                 log.warn("broke role is slave, so putMessage is forbidden");
@@ -398,7 +398,7 @@ public class DefaultMessageStore implements MessageStore {
             return PutMessageStatus.SERVICE_NOT_AVAILABLE;
         }
 
-        if (!this.runningFlags.isWriteable()) {
+        if (!this.runningFlags.isWriteable()) { // 不允许写，可能是磁盘满了，
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
                 log.warn("the message store is not writable. It may be caused by one of the following reasons: " +
@@ -415,6 +415,17 @@ public class DefaultMessageStore implements MessageStore {
         return PutMessageStatus.PUT_OK;
     }
 
+    /**
+     * CompletableFuture 的用法
+     * supplyAsync(): 异步处理任务, 有返回值
+     * runAsync(): 异步处理任务, 没有返回值
+     * allOf(): 需要等待所有的异步任务都执行完毕,才会返回一个新的CompletableFuture
+     * anyOf(): 任意一个异步任务执行完毕,就会返回一个新的CompletableFuture
+     * completedFuture(): 这种方式获取的 CompletableFuture 不是异步的，它会等待获取明确的返回结果之后再返回一个已经完成的 CompletableFuture
+     *
+     * @param msg MessageInstance to store
+     * @return
+     */
     @Override
     public CompletableFuture<PutMessageResult> asyncPutMessage(MessageExtBrokerInner msg) {
         PutMessageStatus checkStoreStatus = this.checkStoreStatus();
@@ -446,19 +457,21 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     public CompletableFuture<PutMessageResult> asyncPutMessages(MessageExtBatch messageExtBatch) {
-        PutMessageStatus checkStoreStatus = this.checkStoreStatus();
+        PutMessageStatus checkStoreStatus = this.checkStoreStatus(); // 检查存储状态是不是允许
         if (checkStoreStatus != PutMessageStatus.PUT_OK) {
             return CompletableFuture.completedFuture(new PutMessageResult(checkStoreStatus, null));
         }
 
-        PutMessageStatus msgCheckStatus = this.checkMessages(messageExtBatch);
+        PutMessageStatus msgCheckStatus = this.checkMessages(messageExtBatch); // 校验消息
         if (msgCheckStatus == PutMessageStatus.MESSAGE_ILLEGAL) {
             return CompletableFuture.completedFuture(new PutMessageResult(msgCheckStatus, null));
         }
 
         long beginTime = this.getSystemClock().now();
+        // 异步执行
         CompletableFuture<PutMessageResult> resultFuture = this.commitLog.asyncPutMessages(messageExtBatch);
 
+        // 异步回调
         resultFuture.thenAccept((result) -> {
             long elapsedTime = this.getSystemClock().now() - beginTime;
             if (elapsedTime > 500) {
@@ -467,7 +480,7 @@ public class DefaultMessageStore implements MessageStore {
 
             this.storeStatsService.setPutMessageEntireTimeMax(elapsedTime);
 
-            if (null == result || !result.isOk()) {
+            if (null == result || !result.isOk()) {// 存储失败
                 this.storeStatsService.getPutMessageFailedTimes().incrementAndGet();
             }
         });

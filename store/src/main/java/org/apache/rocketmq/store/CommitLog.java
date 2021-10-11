@@ -621,9 +621,10 @@ public class CommitLog {
         long elapsedTimeInLock = 0;
         MappedFile unlockMappedFile = null;
 
+        // 加锁，写文件是个串行的，不支持并发
         putMessageLock.lock(); //spin or ReentrantLock ,depending on store config
         try {
-            MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
+            MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();// 从文件队列中取最后一个文件
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
             this.beginTimeInLock = beginLockTimestamp;
 
@@ -631,20 +632,22 @@ public class CommitLog {
             // global
             msg.setStoreTimestamp(beginLockTimestamp);
 
-            if (null == mappedFile || mappedFile.isFull()) {
+            if (null == mappedFile || mappedFile.isFull()) { // 没有文件或者文件已经满了
+                // 获取文件没有就创建，默认开始偏移量0
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
-            if (null == mappedFile) {
+            if (null == mappedFile) {// 创建失败
                 log.error("create mapped file1 error, topic: " + msg.getTopic() + " clientAddr: " + msg.getBornHostString());
                 beginTimeInLock = 0;
+                // 返回一个明确的，结果
                 return CompletableFuture.completedFuture(new PutMessageResult(PutMessageStatus.CREATE_MAPEDFILE_FAILED, null));
             }
 
             result = mappedFile.appendMessage(msg, this.appendMessageCallback, putMessageContext);
-            switch (result.getStatus()) {
+            switch (result.getStatus()) { // @see org.apache.rocketmq.store.AppendMessageStatus
                 case PUT_OK:
                     break;
-                case END_OF_FILE:
+                case END_OF_FILE: // 超过文件大小，
                     unlockMappedFile = mappedFile;
                     // Create a new file, re-write the message
                     mappedFile = this.mappedFileQueue.getLastMappedFile(0);
@@ -1267,6 +1270,7 @@ public class CommitLog {
             // PHY OFFSET
             long wroteOffset = fileFromOffset + byteBuffer.position();
 
+            // 构建msgID。msgid结构：4字节ip + 4字节端口 + 8字节偏移量，然后toStirng
             Supplier<String> msgIdSupplier = () -> {
                 int sysflag = msgInner.getSysFlag();
                 int msgIdLen = (sysflag & MessageSysFlag.STOREHOSTADDRESS_V6_FLAG) == 0 ? 4 + 4 + 8 : 16 + 4 + 8;
@@ -1277,11 +1281,11 @@ public class CommitLog {
                 return UtilAll.bytes2string(msgIdBuffer.array());
             };
 
-            // Record ConsumeQueue information
+            // Record ConsumeQueue information topic 队列列表
             String key = putMessageContext.getTopicQueueTableKey();
             Long queueOffset = CommitLog.this.topicQueueTable.get(key);
             if (null == queueOffset) {
-                queueOffset = 0L;
+                queueOffset = 0L; // 没有新增
                 CommitLog.this.topicQueueTable.put(key, queueOffset);
             }
 
@@ -1304,16 +1308,17 @@ public class CommitLog {
             final int msgLen = preEncodeBuffer.getInt(0);
 
             // Determines whether there is sufficient free space
+            // 消息长度， + 文件结尾长度，大于文件剩余，表明这个文件存储不下了
             if ((msgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
-                this.msgStoreItemMemory.clear();
-                // 1 TOTALSIZE
+                this.msgStoreItemMemory.clear(); //
+                // 1 TOTALSIZE 条目总长度，4个字节
                 this.msgStoreItemMemory.putInt(maxBlank);
-                // 2 MAGICCODE
+                // 2 MAGICCODE 魔法数 4个字节，固定
                 this.msgStoreItemMemory.putInt(CommitLog.BLANK_MAGIC_CODE);
                 // 3 The remaining space may be any value
                 // Here the length of the specially set maxBlank
                 final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
-                byteBuffer.put(this.msgStoreItemMemory.array(), 0, 8);
+                byteBuffer.put(this.msgStoreItemMemory.array(), 0, 8); // 消息写入byteBuffer,还没有刷写到磁盘
                 return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset,
                         maxBlank, /* only wrote 8 bytes, but declare wrote maxBlank for compute write position */
                         msgIdSupplier, msgInner.getStoreTimestamp(),

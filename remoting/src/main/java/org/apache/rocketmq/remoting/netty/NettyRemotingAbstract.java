@@ -66,6 +66,7 @@ public abstract class NettyRemotingAbstract {
 
     /**
      * Semaphore to limit maximum number of on-going asynchronous requests, which protects system memory footprint.
+     * 信号量
      */
     protected final Semaphore semaphoreAsync;
 
@@ -166,6 +167,7 @@ public abstract class NettyRemotingAbstract {
         }
     }
 
+    // 钩子函数。我也可以理解成监听，也可以用责任你连模式
     protected void doBeforeRpcHooks(String addr, RemotingCommand request) {
         if (rpcHooks.size() > 0) {
             for (RPCHook rpcHook: rpcHooks) {
@@ -411,7 +413,7 @@ public abstract class NettyRemotingAbstract {
 
         try {
             final ResponseFuture responseFuture = new ResponseFuture(channel, opaque, timeoutMillis, null, null);
-            this.responseTable.put(opaque, responseFuture);
+            this.responseTable.put(opaque, responseFuture); // 请求存起来。等响应，再取出来
             final SocketAddress addr = channel.remoteAddress();
             channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                 @Override
@@ -423,19 +425,20 @@ public abstract class NettyRemotingAbstract {
                         responseFuture.setSendRequestOK(false);
                     }
 
-                    responseTable.remove(opaque);
+                    responseTable.remove(opaque); // 得到结果后，移出
                     responseFuture.setCause(f.cause());
-                    responseFuture.putResponse(null);
+                    responseFuture.putResponse(null); // 不要结果吗？可能发消息，就是不要响应，只知道，我发送成功即可
                     log.warn("send a request command to channel <" + addr + "> failed.");
                 }
             });
 
+            // 等结果，等待超时
             RemotingCommand responseCommand = responseFuture.waitResponse(timeoutMillis);
             if (null == responseCommand) {
-                if (responseFuture.isSendRequestOK()) {
+                if (responseFuture.isSendRequestOK()) { // 发出去了没收到，就是超时
                     throw new RemotingTimeoutException(RemotingHelper.parseSocketAddressAddr(addr), timeoutMillis,
                         responseFuture.getCause());
-                } else {
+                } else { //发都没发出去
                     throw new RemotingSendRequestException(RemotingHelper.parseSocketAddressAddr(addr), responseFuture.getCause());
                 }
             }
@@ -451,12 +454,12 @@ public abstract class NettyRemotingAbstract {
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         long beginStartTime = System.currentTimeMillis();
         final int opaque = request.getOpaque();
-        boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS);
+        boolean acquired = this.semaphoreAsync.tryAcquire(timeoutMillis, TimeUnit.MILLISECONDS); // 获取一次信号
         if (acquired) {
-            final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync);
+            final SemaphoreReleaseOnlyOnce once = new SemaphoreReleaseOnlyOnce(this.semaphoreAsync); // 封装当前获取到的异步的信号量
             long costTime = System.currentTimeMillis() - beginStartTime;
             if (timeoutMillis < costTime) {
-                once.release();
+                once.release(); // 超时释放信号
                 throw new RemotingTimeoutException("invokeAsyncImpl call timeout");
             }
 
@@ -465,23 +468,23 @@ public abstract class NettyRemotingAbstract {
             try {
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
-                    public void operationComplete(ChannelFuture f) throws Exception {
-                        if (f.isSuccess()) {
+                    public void operationComplete(ChannelFuture f) throws Exception {// 发送结束
+                        if (f.isSuccess()) {// 成功
                             responseFuture.setSendRequestOK(true);
-                            return;
+                            return; // 这里没有释放信号，不知道咋想的 有个扫描，会自动释放，超时1后1秒的 @see org.apache.rocketmq.remoting.netty.NettyRemotingAbstract.scanResponseTable
                         }
-                        requestFail(opaque);
+                        requestFail(opaque);// 失败
                         log.warn("send a request command to channel <{}> failed.", RemotingHelper.parseChannelRemoteAddr(channel));
                     }
                 });
             } catch (Exception e) {
-                responseFuture.release();
+                responseFuture.release();// 释放信号
                 log.warn("send a request command to channel <" + RemotingHelper.parseChannelRemoteAddr(channel) + "> Exception", e);
                 throw new RemotingSendRequestException(RemotingHelper.parseChannelRemoteAddr(channel), e);
             }
         } else {
             if (timeoutMillis <= 0) {
-                throw new RemotingTooMuchRequestException("invokeAsyncImpl invoke too fast");
+                throw new RemotingTooMuchRequestException("invokeAsyncImpl invoke too fast"); // 发送太频繁了，超过了限流
             } else {
                 String info =
                     String.format("invokeAsyncImpl tryAcquire semaphore timeout, %dms, waiting thread nums: %d semaphoreAsyncValue: %d",
@@ -537,14 +540,14 @@ public abstract class NettyRemotingAbstract {
                 channel.writeAndFlush(request).addListener(new ChannelFutureListener() {
                     @Override
                     public void operationComplete(ChannelFuture f) throws Exception {
-                        once.release();
+                        once.release(); // 释放信号
                         if (!f.isSuccess()) {
                             log.warn("send a request command to channel <" + channel.remoteAddress() + "> failed.");
                         }
                     }
                 });
             } catch (Exception e) {
-                once.release();
+                once.release(); // 异常释放信号
                 log.warn("write send a request command to channel <" + channel.remoteAddress() + "> failed.");
                 throw new RemotingSendRequestException(RemotingHelper.parseChannelRemoteAddr(channel), e);
             }

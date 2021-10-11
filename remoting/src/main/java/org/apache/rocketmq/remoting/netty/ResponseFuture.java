@@ -30,7 +30,7 @@ public class ResponseFuture {
     private final long timeoutMillis;
     private final InvokeCallback invokeCallback;
     private final long beginTimestamp = System.currentTimeMillis();
-    private final CountDownLatch countDownLatch = new CountDownLatch(1);
+    private final CountDownLatch countDownLatch = new CountDownLatch(1); // new 了一个，每个对象一个，
 
     private final SemaphoreReleaseOnlyOnce once;
 
@@ -68,13 +68,13 @@ public class ResponseFuture {
     }
 
     public RemotingCommand waitResponse(final long timeoutMillis) throws InterruptedException {
-        this.countDownLatch.await(timeoutMillis, TimeUnit.MILLISECONDS);
+        this.countDownLatch.await(timeoutMillis, TimeUnit.MILLISECONDS); // 线程等待
         return this.responseCommand;
     }
 
     public void putResponse(final RemotingCommand responseCommand) {
         this.responseCommand = responseCommand;
-        this.countDownLatch.countDown();
+        this.countDownLatch.countDown(); // 得到结果后减一
     }
 
     public long getBeginTimestamp() {

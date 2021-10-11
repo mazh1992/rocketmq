@@ -115,7 +115,7 @@ public class MixAll {
             int split = brokerAddr.lastIndexOf(":");
             String ip = brokerAddr.substring(0, split);
             String port = brokerAddr.substring(split + 1);
-            String brokerAddrNew = ip + ":" + (Integer.parseInt(port) - 2);
+            String brokerAddrNew = ip + ":" + (Integer.parseInt(port) - 2); // vip通道就是当前端口减2，什么逻辑，？？ 暂时记下等后续（可能Broker启动的时候会开两个端口）
             return brokerAddrNew;
         } else {
             return brokerAddr;
