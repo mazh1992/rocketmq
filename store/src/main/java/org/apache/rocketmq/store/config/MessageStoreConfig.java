@@ -43,7 +43,7 @@ public class MessageStoreConfig {
     private int bitMapLengthConsumeQueueExt = 64;
 
     // CommitLog flush interval
-    // flush data to disk
+    // flush data to disk 异步刷盘周期
     @ImportantField
     private int flushIntervalCommitLog = 500;
 
@@ -88,7 +88,7 @@ public class MessageStoreConfig {
     // How many pages are to be flushed when flush CommitLog
     private int flushCommitLogLeastPages = 4;
     // How many pages are to be committed when commit data to file
-    private int commitCommitLogLeastPages = 4;
+    private int commitCommitLogLeastPages = 4; // 一次提交任务至少包含的页数，少于则忽略本次提交
     // Flush page size when the disk in warming state
     private int flushLeastPagesWhenWarmMapedFile = 1024 / 4 * 16;
     // How many pages are to be flushed when flush ConsumeQueue
@@ -123,8 +123,8 @@ public class MessageStoreConfig {
     @ImportantField
     private BrokerRole brokerRole = BrokerRole.ASYNC_MASTER;
     @ImportantField
-    private FlushDiskType flushDiskType = FlushDiskType.ASYNC_FLUSH;
-    private int syncFlushTimeout = 1000 * 5;
+    private FlushDiskType flushDiskType = FlushDiskType.ASYNC_FLUSH; // 默认是异步刷盘
+    private int syncFlushTimeout = 1000 * 5; // 刷盘超时时间 5秒
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
     private long flushDelayOffsetInterval = 1000 * 10;
     @ImportantField
