@@ -1284,7 +1284,7 @@ public class DefaultMessageStore implements MessageStore {
             public void run() {
                 DefaultMessageStore.this.cleanFilesPeriodically();
             }
-        }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS);
+        }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS); // 延迟1分钟执行，每10秒间隔
 
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
@@ -1598,13 +1598,13 @@ public class DefaultMessageStore implements MessageStore {
 
         private void deleteExpiredFiles() {
             int deleteCount = 0;
-            long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime(); // 文件过期时间，默认72小时
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
             int destroyMapedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
 
-            boolean timeup = this.isTimeToDelete();
-            boolean spacefull = this.isSpaceToDelete();
-            boolean manualDelete = this.manualDeleteFileSeveralTimes > 0;
+            boolean timeup = this.isTimeToDelete(); // 指定时间删除，默认凌晨4点
+            boolean spacefull = this.isSpaceToDelete(); // 磁盘空间不充足 删除
+            boolean manualDelete = this.manualDeleteFileSeveralTimes > 0; // 手动删除
 
             if (timeup || spacefull || manualDelete) {
 

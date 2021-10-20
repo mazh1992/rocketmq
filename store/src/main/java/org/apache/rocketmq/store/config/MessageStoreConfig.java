@@ -63,9 +63,9 @@ public class MessageStoreConfig {
     // ConsumeQueue flush interval
     private int flushIntervalConsumeQueue = 1000;
     // Resource reclaim interval
-    private int cleanResourceInterval = 10000;
+    private int cleanResourceInterval = 10000; // 清楚过期文件周期，10秒
     // CommitLog removal interval
-    private int deleteCommitLogFilesInterval = 100;
+    private int deleteCommitLogFilesInterval = 100; // 两次删除文件的间隔
     // ConsumeQueue removal interval
     private int deleteConsumeQueueFilesInterval = 100;
     private int destroyMapedFileIntervalForcibly = 1000 * 120;
@@ -76,7 +76,7 @@ public class MessageStoreConfig {
     private int diskMaxUsedSpaceRatio = 75;
     // The number of hours to keep a log file before deleting it (in hours)
     @ImportantField
-    private int fileReservedTime = 72;
+    private int fileReservedTime = 72; // 文件过期时间，超过这个时间可能会被删除
     // Flow control for ConsumeQueue
     private int putMsgIndexHightWater = 600000;
     // The maximum size of message,default is 4M

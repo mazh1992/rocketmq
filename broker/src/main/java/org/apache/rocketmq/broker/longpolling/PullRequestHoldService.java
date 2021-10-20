@@ -42,7 +42,7 @@ public class PullRequestHoldService extends ServiceThread {
     }
 
     public void suspendPullRequest(final String topic, final int queueId, final PullRequest pullRequest) {
-        String key = this.buildKey(topic, queueId);
+        String key = this.buildKey(topic, queueId); // 一个队列只能有一个消费者，一个消费者可以消费多个队列，所以这样组装key，没毛病
         ManyPullRequest mpr = this.pullRequestTable.get(key);
         if (null == mpr) {
             mpr = new ManyPullRequest();
@@ -69,9 +69,9 @@ public class PullRequestHoldService extends ServiceThread {
         while (!this.isStopped()) {
             try {
                 if (this.brokerController.getBrokerConfig().isLongPollingEnable()) {
-                    this.waitForRunning(5 * 1000);
+                    this.waitForRunning(5 * 1000); // 开启长轮询等5秒 是不是有点短，Apollo 等60秒
                 } else {
-                    this.waitForRunning(this.brokerController.getBrokerConfig().getShortPollingTimeMills());
+                    this.waitForRunning(this.brokerController.getBrokerConfig().getShortPollingTimeMills()); // 默认等1秒
                 }
 
                 long beginLockTimestamp = this.systemClock.now();
@@ -93,7 +93,7 @@ public class PullRequestHoldService extends ServiceThread {
         return PullRequestHoldService.class.getSimpleName();
     }
 
-    private void checkHoldRequest() {
+    private void checkHoldRequest() { // 循环列表，判断是否有新消息到达
         for (String key : this.pullRequestTable.keySet()) {
             String[] kArray = key.split(TOPIC_QUEUEID_SEPARATOR);
             if (2 == kArray.length) {
@@ -124,11 +124,11 @@ public class PullRequestHoldService extends ServiceThread {
 
                 for (PullRequest request : requestList) {
                     long newestOffset = maxOffset;
-                    if (newestOffset <= request.getPullFromThisOffset()) {
+                    if (newestOffset <= request.getPullFromThisOffset()) { // 小于等于的话，重新再重新判断一次
                         newestOffset = this.brokerController.getMessageStore().getMaxOffsetInQueue(topic, queueId);
                     }
 
-                    if (newestOffset > request.getPullFromThisOffset()) {
+                    if (newestOffset > request.getPullFromThisOffset()) { // 大于等于说明有消息了
                         boolean match = request.getMessageFilter().isMatchedByConsumeQueue(tagsCode,
                             new ConsumeQueueExt.CqExtUnit(tagsCode, msgStoreTime, filterBitMap));
                         // match by bit map, need eval again when properties is not null.
@@ -137,7 +137,7 @@ public class PullRequestHoldService extends ServiceThread {
                         }
 
                         if (match) {
-                            try {
+                            try {// 有消息唤醒
                                 this.brokerController.getPullMessageProcessor().executeRequestWhenWakeup(request.getClientChannel(),
                                     request.getRequestCommand());
                             } catch (Throwable e) {
@@ -147,7 +147,7 @@ public class PullRequestHoldService extends ServiceThread {
                         }
                     }
 
-                    if (System.currentTimeMillis() >= (request.getSuspendTimestamp() + request.getTimeoutMillis())) {
+                    if (System.currentTimeMillis() >= (request.getSuspendTimestamp() + request.getTimeoutMillis())) { // 超时唤醒
                         try {
                             this.brokerController.getPullMessageProcessor().executeRequestWhenWakeup(request.getClientChannel(),
                                 request.getRequestCommand());

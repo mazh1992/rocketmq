@@ -141,23 +141,23 @@ public class PullAPIWrapper {
     }
 
     public PullResult pullKernelImpl(
-        final MessageQueue mq,
-        final String subExpression,
-        final String expressionType,
-        final long subVersion,
-        final long offset,
-        final int maxNums,
-        final int sysFlag,
-        final long commitOffset,
-        final long brokerSuspendMaxTimeMillis,
-        final long timeoutMillis,
-        final CommunicationMode communicationMode,
-        final PullCallback pullCallback
+        final MessageQueue mq, // 从哪个消费队列拉取消息
+        final String subExpression, // 消息过滤表达式
+        final String expressionType, // 消息表达式类型。分TAG，SQL92
+        final long subVersion, // 子版本号
+        final long offset, // 消息偏移量
+        final int maxNums, // 本次拉取最大条数，默认32条
+        final int sysFlag, // 拉取系统标记
+        final long commitOffset, // 当前messageQueue的消费进度（内存中）
+        final long brokerSuspendMaxTimeMillis, // 消息拉取过程中允许Broker挂起时间，默认15s
+        final long timeoutMillis, // 消息拉取超时时间
+        final CommunicationMode communicationMode, // 消息拉取默认，默认为异步拉取
+        final PullCallback pullCallback //从broker拉取到消息后的回调方法
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
         FindBrokerResult findBrokerResult =
             this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
-                this.recalculatePullFromWhichNode(mq), false);
-        if (null == findBrokerResult) {
+                this.recalculatePullFromWhichNode(mq), false); // 查找broker
+        if (null == findBrokerResult) { // 没有找到的话，刷新一下注册中心，再查找
             this.mQClientFactory.updateTopicRouteInfoFromNameServer(mq.getTopic());
             findBrokerResult =
                 this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(),
@@ -168,7 +168,7 @@ public class PullAPIWrapper {
             {
                 // check version
                 if (!ExpressionType.isTagType(expressionType)
-                    && findBrokerResult.getBrokerVersion() < MQVersion.Version.V4_1_0_SNAPSHOT.ordinal()) {
+                    && findBrokerResult.getBrokerVersion() < MQVersion.Version.V4_1_0_SNAPSHOT.ordinal()) { // 低版本不支持消息过滤
                     throw new MQClientException("The broker[" + mq.getBrokerName() + ", "
                         + findBrokerResult.getBrokerVersion() + "] does not upgrade to support for filter message by " + expressionType, null);
                 }
@@ -196,7 +196,7 @@ public class PullAPIWrapper {
             if (PullSysFlag.hasClassFilterFlag(sysFlagInner)) {
                 brokerAddr = computePullFromWhichFilterServer(mq.getTopic(), brokerAddr);
             }
-
+            // 开始拉取
             PullResult pullResult = this.mQClientFactory.getMQClientAPIImpl().pullMessage(
                 brokerAddr,
                 requestHeader,

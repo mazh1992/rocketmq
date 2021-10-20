@@ -704,6 +704,18 @@ public class MQClientAPIImpl {
         return sendResult;
     }
 
+    /**
+     * 拉取消息
+     * @param addr
+     * @param requestHeader
+     * @param timeoutMillis
+     * @param communicationMode
+     * @param pullCallback
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public PullResult pullMessage(
         final String addr,
         final PullMessageRequestHeader requestHeader,
@@ -713,7 +725,7 @@ public class MQClientAPIImpl {
     ) throws RemotingException, MQBrokerException, InterruptedException {
         RemotingCommand request = RemotingCommand.createRequestCommand(RequestCode.PULL_MESSAGE, requestHeader);
 
-        switch (communicationMode) {
+        switch (communicationMode) { // 默认异步
             case ONEWAY:
                 assert false;
                 return null;
@@ -730,6 +742,7 @@ public class MQClientAPIImpl {
         return null;
     }
 
+    // 异步拉取
     private void pullMessageAsync(
         final String addr,
         final RemotingCommand request,
@@ -749,12 +762,12 @@ public class MQClientAPIImpl {
                         pullCallback.onException(e);
                     }
                 } else {
-                    if (!responseFuture.isSendRequestOK()) {
+                    if (!responseFuture.isSendRequestOK()) { // 请求发送失败
                         pullCallback.onException(new MQClientException("send request failed to " + addr + ". Request: " + request, responseFuture.getCause()));
-                    } else if (responseFuture.isTimeout()) {
+                    } else if (responseFuture.isTimeout()) { // 请求超时
                         pullCallback.onException(new MQClientException("wait response from " + addr + " timeout :" + responseFuture.getTimeoutMillis() + "ms" + ". Request: " + request,
                             responseFuture.getCause()));
-                    } else {
+                    } else { // 未知异常
                         pullCallback.onException(new MQClientException("unknown reason. addr: " + addr + ", timeoutMillis: " + timeoutMillis + ". Request: " + request, responseFuture.getCause()));
                     }
                 }
