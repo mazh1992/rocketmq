@@ -180,19 +180,19 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
     @Override
     public void submitConsumeRequest(
-        final List<MessageExt> msgs,
-        final ProcessQueue processQueue,
-        final MessageQueue messageQueue,
-        final boolean dispatchToConsume) {
-        final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize();
-        if (msgs.size() <= consumeBatchSize) {
+        final List<MessageExt> msgs, // 消息列表 默认最多32
+        final ProcessQueue processQueue, // 消息处理队列
+        final MessageQueue messageQueue, // 消息所属消费队列
+        final boolean dispatchToConsume) { // 是否转发到消费线程，并法消费时忽略该参数
+        final int consumeBatchSize = this.defaultMQPushConsumer.getConsumeMessageBatchMaxSize(); // 批处理最大条数 默认1
+        if (msgs.size() <= consumeBatchSize) { // 消息数据量小于或等于配置的最大批处理条数
             ConsumeRequest consumeRequest = new ConsumeRequest(msgs, processQueue, messageQueue);
             try {
-                this.consumeExecutor.submit(consumeRequest);
-            } catch (RejectedExecutionException e) {
+                this.consumeExecutor.submit(consumeRequest); // 直接提交
+            } catch (RejectedExecutionException e) { // 拒绝 5s再提交
                 this.submitConsumeRequestLater(consumeRequest);
             }
-        } else {
+        } else { // 超过了，以分页的形式提交，每页就是批量最大处理数
             for (int total = 0; total < msgs.size(); ) {
                 List<MessageExt> msgThis = new ArrayList<MessageExt>(consumeBatchSize);
                 for (int i = 0; i < consumeBatchSize; i++, total++) {
@@ -238,7 +238,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         if (consumeRequest.getMsgs().isEmpty())
             return;
 
-        switch (status) {
+        switch (status) { // 根据响应的结果判断，ackIndex
             case CONSUME_SUCCESS:
                 if (ackIndex >= consumeRequest.getMsgs().size()) {
                     ackIndex = consumeRequest.getMsgs().size() - 1;
@@ -270,12 +270,12 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                     MessageExt msg = consumeRequest.getMsgs().get(i);
                     boolean result = this.sendMessageBack(msg, context);
                     if (!result) {
-                        msg.setReconsumeTimes(msg.getReconsumeTimes() + 1);
+                        msg.setReconsumeTimes(msg.getReconsumeTimes() + 1); // 重新消费计数器加一
                         msgBackFailed.add(msg);
                     }
                 }
 
-                if (!msgBackFailed.isEmpty()) {
+                if (!msgBackFailed.isEmpty()) { // 需要稍后重新消费的，再丢回去
                     consumeRequest.getMsgs().removeAll(msgBackFailed);
 
                     this.submitConsumeRequestLater(msgBackFailed, consumeRequest.getProcessQueue(), consumeRequest.getMessageQueue());
@@ -286,7 +286,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
         }
 
         long offset = consumeRequest.getProcessQueue().removeMessage(consumeRequest.getMsgs());
-        if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) {
+        if (offset >= 0 && !consumeRequest.getProcessQueue().isDropped()) { // 更新队列消费偏移量
             this.defaultMQPushConsumerImpl.getOffsetStore().updateOffset(consumeRequest.getMessageQueue(), offset, true);
         }
     }
@@ -358,7 +358,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
         @Override
         public void run() {
-            if (this.processQueue.isDropped()) {
+            if (this.processQueue.isDropped()) {// 不让消费的，就不消费了
                 log.info("the message queue not be able to consume, because it's dropped. group={} {}", ConsumeMessageConcurrentlyService.this.consumerGroup, this.messageQueue);
                 return;
             }
@@ -377,7 +377,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
                 consumeMessageContext.setMq(messageQueue);
                 consumeMessageContext.setMsgList(msgs);
                 consumeMessageContext.setSuccess(false);
-                ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.executeHookBefore(consumeMessageContext);
+                ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.executeHookBefore(consumeMessageContext);// 消费前钩子函数
             }
 
             long beginTimestamp = System.currentTimeMillis();
@@ -385,11 +385,11 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
             ConsumeReturnType returnType = ConsumeReturnType.SUCCESS;
             try {
                 if (msgs != null && !msgs.isEmpty()) {
-                    for (MessageExt msg : msgs) {
+                    for (MessageExt msg : msgs) { // 设置开始消费时间
                         MessageAccessor.setConsumeStartTimeStamp(msg, String.valueOf(System.currentTimeMillis()));
                     }
                 }
-                status = listener.consumeMessage(Collections.unmodifiableList(msgs), context);
+                status = listener.consumeMessage(Collections.unmodifiableList(msgs), context); // 调用消息监听。真正消费端开始消费消息
             } catch (Throwable e) {
                 log.warn(String.format("consumeMessage exception: %s Group: %s Msgs: %s MQ: %s",
                     RemotingHelper.exceptionSimpleDesc(e),
@@ -427,13 +427,15 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
             if (ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.hasHook()) {
                 consumeMessageContext.setStatus(status.toString());
-                consumeMessageContext.setSuccess(ConsumeConcurrentlyStatus.CONSUME_SUCCESS == status);
+                consumeMessageContext.setSuccess(ConsumeConcurrentlyStatus.CONSUME_SUCCESS == status); // 消费后的钩子函数
                 ConsumeMessageConcurrentlyService.this.defaultMQPushConsumerImpl.executeHookAfter(consumeMessageContext);
             }
 
             ConsumeMessageConcurrentlyService.this.getConsumerStatsManager()
                 .incConsumeRT(ConsumeMessageConcurrentlyService.this.consumerGroup, messageQueue.getTopic(), consumeRT);
 
+            // 处理完成，还要再判断一下，有没有因为 rebalance原因，把当前队列给去掉了，
+            // 如果去掉了，就不在执行后续了，会直接丢回去，然后再消费，也就是说，会重复消费
             if (!processQueue.isDropped()) {
                 ConsumeMessageConcurrentlyService.this.processConsumeResult(status, context, this);
             } else {
