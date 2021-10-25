@@ -890,10 +890,11 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
      */
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
+            // 类模式的消息过滤。
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(topic, subExpression);
             this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
             if (this.mQClientFactory != null) {
-                this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
+                this.mQClientFactory.sendHeartbeatToAllBrokerWithLock(); // 定时将消息短订阅信息中类过滤模式的源码过滤类上传到FilterServer
             }
         } catch (Exception e) {
             throw new MQClientException("subscription exception", e);
