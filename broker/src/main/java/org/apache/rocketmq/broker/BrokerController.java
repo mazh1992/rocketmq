@@ -231,6 +231,7 @@ public class BrokerController {
         return queryThreadPoolQueue;
     }
 
+    // Broker 初始化
     public boolean initialize() throws CloneNotSupportedException {
         boolean result = this.topicConfigManager.load();
 
@@ -417,7 +418,9 @@ public class BrokerController {
                 }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
             }
 
+            // 主从同步
             if (!messageStoreConfig.isEnableDLegerCommitLog()) {
+                // 如果当前是从节点 并且主节点地址不为空
                 if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
                     if (this.messageStoreConfig.getHaMasterAddress() != null && this.messageStoreConfig.getHaMasterAddress().length() >= 6) {
                         this.messageStore.updateHaMasterAddress(this.messageStoreConfig.getHaMasterAddress());
@@ -425,7 +428,7 @@ public class BrokerController {
                     } else {
                         this.updateMasterHAServerAddrPeriodically = true;
                     }
-                } else {
+                } else { // 主节点，打印差异
                     this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
                         @Override
                         public void run() {
@@ -1136,8 +1139,8 @@ public class BrokerController {
     }
 
     private void handleSlaveSynchronize(BrokerRole role) {
-        if (role == BrokerRole.SLAVE) {
-            if (null != slaveSyncFuture) {
+        if (role == BrokerRole.SLAVE) { // 从节点同步
+            if (null != slaveSyncFuture) { // 还在等同步结果？？
                 slaveSyncFuture.cancel(false);
             }
             this.slaveSynchronize.setMasterAddr(null);
@@ -1151,7 +1154,7 @@ public class BrokerController {
                         log.error("ScheduledTask SlaveSynchronize syncAll error.", e);
                     }
                 }
-            }, 1000 * 3, 1000 * 10, TimeUnit.MILLISECONDS);
+            }, 1000 * 3, 1000 * 10, TimeUnit.MILLISECONDS); // 延迟3S开启。每10秒同步一次
         } else {
             //handle the slave synchronise
             if (null != slaveSyncFuture) {

@@ -45,19 +45,22 @@ public class SlaveSynchronize {
         this.masterAddr = masterAddr;
     }
 
+    // 从节点，发起同步请求
     public void syncAll() {
-        this.syncTopicConfig();
-        this.syncConsumerOffset();
-        this.syncDelayOffset();
-        this.syncSubscriptionGroupConfig();
+        this.syncTopicConfig();// 同步主题配置信息
+        this.syncConsumerOffset(); // 同步消费者偏移量
+        this.syncDelayOffset(); // 同步延迟消费的偏移量
+        this.syncSubscriptionGroupConfig(); // 同步订阅的消息组信息
     }
 
     private void syncTopicConfig() {
         String masterAddrBak = this.masterAddr;
+        // 主节点地址存在，并且当前不是主节点（应该是主节点挂了，防止当前节点被选举为主节点，出现自己和自己同步的情况）
         if (masterAddrBak != null && !masterAddrBak.equals(brokerController.getBrokerAddr())) {
             try {
                 TopicConfigSerializeWrapper topicWrapper =
                     this.brokerController.getBrokerOuterAPI().getAllTopicConfig(masterAddrBak);
+                //比较版本号是否一致，不一致则更新
                 if (!this.brokerController.getTopicConfigManager().getDataVersion()
                     .equals(topicWrapper.getDataVersion())) {
 

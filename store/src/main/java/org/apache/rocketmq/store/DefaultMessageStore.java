@@ -905,6 +905,7 @@ public class DefaultMessageStore implements MessageStore {
 
         boolean result = this.commitLog.appendData(startOffset, data, dataStart, dataLength);
         if (result) {
+            //唤醒线程根据CommitLog文件构建ConsumeQueue、IndexFile文件
             this.reputMessageService.wakeup();
         } else {
             log.error("appendToPhyQueue failed " + startOffset + " " + data.length);

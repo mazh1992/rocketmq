@@ -107,9 +107,9 @@ public class HAService {
     // }
 
     public void start() throws Exception {
-        this.acceptSocketService.beginAccept();
+        this.acceptSocketService.beginAccept(); // 在特定端口10912（可配）上监听从服务器的链接
         this.acceptSocketService.start();
-        this.groupTransferService.start();
+        this.groupTransferService.start(); // 主从同步通知实现类
         this.haClient.start();
     }
 
@@ -158,9 +158,9 @@ public class HAService {
      * Listens to slave connections to create {@link HAConnection}.
      */
     class AcceptSocketService extends ServiceThread {
-        private final SocketAddress socketAddressListen;
-        private ServerSocketChannel serverSocketChannel;
-        private Selector selector;
+        private final SocketAddress socketAddressListen; // Broker服务监听套接字(本地 IP+端口 号)。
+        private ServerSocketChannel serverSocketChannel; // 服务端 Socket通道， 基于 NIO。
+        private Selector selector; // 事件选择器，基于 NIO。
 
         public AcceptSocketService(final int port) {
             this.socketAddressListen = new InetSocketAddress(port);
@@ -172,11 +172,13 @@ public class HAService {
          * @throws Exception If fails.
          */
         public void beginAccept() throws Exception {
+            //创建ServerSocketChannel
             this.serverSocketChannel = ServerSocketChannel.open();
             this.selector = RemotingUtil.openSelector();
             this.serverSocketChannel.socket().setReuseAddress(true);
+            //绑定监听端口
             this.serverSocketChannel.socket().bind(this.socketAddressListen);
-            this.serverSocketChannel.configureBlocking(false);
+            this.serverSocketChannel.configureBlocking(false);    //非阻塞
             this.serverSocketChannel.register(this.selector, SelectionKey.OP_ACCEPT);
         }
 
@@ -203,19 +205,19 @@ public class HAService {
 
             while (!this.isStopped()) {
                 try {
-                    this.selector.select(1000);
+                    this.selector.select(1000);// 选择器每1秒，处理一次链接就绪事件，
                     Set<SelectionKey> selected = this.selector.selectedKeys();
 
                     if (selected != null) {
                         for (SelectionKey k : selected) {
                             if ((k.readyOps() & SelectionKey.OP_ACCEPT) != 0) {
-                                SocketChannel sc = ((ServerSocketChannel) k.channel()).accept();
+                                SocketChannel sc = ((ServerSocketChannel) k.channel()).accept(); //创建socketChannel
 
                                 if (sc != null) {
                                     HAService.log.info("HAService receive new connection, "
                                         + sc.socket().getRemoteSocketAddress());
 
-                                    try {
+                                    try {// 创建 HAConn
                                         HAConnection conn = new HAConnection(HAService.this, sc);
                                         conn.start();
                                         HAService.this.addConnection(conn);
@@ -250,6 +252,9 @@ public class HAService {
 
     /**
      * GroupTransferService Service
+     * 负责主从同步复制结束后通知由于等待HA同步结果的而阻塞的消息发送者线程。
+     * 判断主从同步是否完成的依据是Slave中已成功复制的最大消息偏移量是否大于等于消息生产者发送消息后消息服务端返回的下一条消息的起始偏移量。
+     * 如果大于等于说明主从同步完成，否则等待1秒后继续检查，每一批任务中循环5次加上初始的一次一共6次。
      */
     class GroupTransferService extends ServiceThread {
 
@@ -410,18 +415,20 @@ public class HAService {
         }
 
         private boolean processReadEvent() {
-            int readSizeZeroTimes = 0;
+            int readSizeZeroTimes = 0;// 连续读取数据大小是0次
             while (this.byteBufferRead.hasRemaining()) {
                 try {
                     int readSize = this.socketChannel.read(this.byteBufferRead);
                     if (readSize > 0) {
                         readSizeZeroTimes = 0;
+                        // 分发读请求
                         boolean result = this.dispatchReadRequest();
                         if (!result) {
                             log.error("HAClient, dispatchReadRequest error");
                             return false;
                         }
                     } else if (readSize == 0) {
+                        //读取三次都没有内容则跳出循环
                         if (++readSizeZeroTimes >= 3) {
                             break;
                         }
@@ -446,7 +453,7 @@ public class HAService {
                 if (diff >= msgHeaderSize) {
                     long masterPhyOffset = this.byteBufferRead.getLong(this.dispatchPosition);
                     int bodySize = this.byteBufferRead.getInt(this.dispatchPosition + 8);
-
+                    //获取当前本地的commitlog偏移量
                     long slavePhyOffset = HAService.this.defaultMessageStore.getMaxPhyOffset();
 
                     if (slavePhyOffset != 0) {
@@ -554,22 +561,23 @@ public class HAService {
 
             while (!this.isStopped()) {
                 try {
-                    if (this.connectMaster()) {
-
+                    if (this.connectMaster()) { // 和master建立链接
+                        //判断是否向Master反馈当前的消息拉取的偏移量,默认5秒发送一次
                         if (this.isTimeToReportOffset()) {
+                            // 报告从节点的最大偏移量
                             boolean result = this.reportSlaveMaxOffset(this.currentReportedOffset);
                             if (!result) {
                                 this.closeMaster();
                             }
                         }
-
+                        //I/O复用，检查是否有读事件（netty是时候要看一看了）
                         this.selector.select(1000);
-
+                        //核心方法，处理Master返回的待处理的消息
                         boolean ok = this.processReadEvent();
                         if (!ok) {
                             this.closeMaster();
                         }
-
+                        //处理完读事件后，若slaveoffset更新，需要再次发送新的slaveoffset
                         if (!reportSlaveMaxOffsetPlus()) {
                             continue;
                         }

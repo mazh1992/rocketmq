@@ -54,8 +54,8 @@ public class HAConnection {
     }
 
     public void start() {
-        this.readSocketService.start();
-        this.writeSocketService.start();
+        this.readSocketService.start(); // 启动读线程，处理slave 发送的请求
+        this.writeSocketService.start(); // 启动写线程 发送commitlog消息到slave中
     }
 
     public void shutdown() {
@@ -99,13 +99,15 @@ public class HAConnection {
 
             while (!this.isStopped()) {
                 try {
+                    // 等待读事件
                     this.selector.select(1000);
+                    // 处理读事件
                     boolean ok = this.processReadEvent();
                     if (!ok) {
                         HAConnection.log.error("processReadEvent error");
                         break;
                     }
-
+                    //两次读事件的间隔时间超过了既定的值，则master和slave连接失效，跳出循环
                     long interval = HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now() - this.lastReadTimestamp;
                     if (interval > HAConnection.this.haService.getDefaultMessageStore().getMessageStoreConfig().getHaHousekeepingInterval()) {
                         log.warn("ha housekeeping, found this connection[" + HAConnection.this.clientAddr + "] expired, " + interval);
@@ -159,20 +161,25 @@ public class HAConnection {
                     if (readSize > 0) {
                         readSizeZeroTimes = 0;
                         this.lastReadTimestamp = HAConnection.this.haService.getDefaultMessageStore().getSystemClock().now();
+                        //超过8个字节处理，因为slave的broker发送的就是8个字节的slave的offset的心跳
                         if ((this.byteBufferRead.position() - this.processPosition) >= 8) {
+                            //获取离byteBufferRead.position()最近的8的整除数（获取最后一个完整的包）
                             int pos = this.byteBufferRead.position() - (this.byteBufferRead.position() % 8);
-                            long readOffset = this.byteBufferRead.getLong(pos - 8);
+                            long readOffset = this.byteBufferRead.getLong(pos - 8); //读取能读取到的最后一个有效的8个字节的心跳包
                             this.processPosition = pos;
-
+                            //更新slave broker反馈的已经拉取完的offset偏移量
                             HAConnection.this.slaveAckOffset = readOffset;
+                            //若是首次获取slave 反馈的偏移量
                             if (HAConnection.this.slaveRequestOffset < 0) {
+                                //将slave broker请求的拉取消息的偏移量也更新为该值
                                 HAConnection.this.slaveRequestOffset = readOffset;
                                 log.info("slave[" + HAConnection.this.clientAddr + "] request offset " + readOffset);
                             }
-
+                            //通知slaveAckOffset已经更新
                             HAConnection.this.haService.notifyTransferSome(HAConnection.this.slaveAckOffset);
                         }
                     } else if (readSize == 0) {
+                        //readSize连续3次都为0跳出循环
                         if (++readSizeZeroTimes >= 3) {
                             break;
                         }
@@ -189,7 +196,7 @@ public class HAConnection {
             return true;
         }
     }
-
+    // 写线程
     class WriteSocketService extends ServiceThread {
         private final Selector selector;
         private final SocketChannel socketChannel;
@@ -214,14 +221,17 @@ public class HAConnection {
 
             while (!this.isStopped()) {
                 try {
+                    //等待写事件
                     this.selector.select(1000);
-
+                    //如果slaveRequestOffset等于-1说明 master还未接收到slave broker的拉取请求，放弃本次处理
+                    //slaveRequestOffset在收到slave broker请求时更新
                     if (-1 == HAConnection.this.slaveRequestOffset) {
                         Thread.sleep(10);
                         continue;
                     }
-
+                    //如果nextTransferFromWhere为-1说明是第一次进行数据传输，需要计算要传输的物理偏移量
                     if (-1 == this.nextTransferFromWhere) {
+                        //如果slaveRequestOffset为0则从当前最后一个commitlog文件传输，否则根据slave broker的拉取请求偏移量开始
                         if (0 == HAConnection.this.slaveRequestOffset) {
                             long masterOffset = HAConnection.this.haService.getDefaultMessageStore().getCommitLog().getMaxOffset();
                             masterOffset =
@@ -290,7 +300,7 @@ public class HAConnection {
 
                         this.lastWriteOver = this.transferData();
                     } else {
-
+                        //若没有获取到commitlog数据则等待应用层追加
                         HAConnection.this.haService.getWaitNotifyObject().allWaitForRunning(100);
                     }
                 } catch (Exception e) {
