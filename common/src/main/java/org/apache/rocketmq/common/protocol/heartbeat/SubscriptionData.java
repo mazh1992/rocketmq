@@ -27,12 +27,12 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class SubscriptionData implements Comparable<SubscriptionData> {
-    public final static String SUB_ALL = "*";
-    private boolean classFilterMode = false;
-    private String topic;
-    private String subString;
-    private Set<String> tagsSet = new HashSet<String>();
-    private Set<Integer> codeSet = new HashSet<Integer>();
+    public final static String SUB_ALL = "*"; // 默认全匹配
+    private boolean classFilterMode = false; // 是否为类过滤模式。默认为false
+    private String topic; // 消息主题名
+    private String subString; // 消息过滤表达式
+    private Set<String> tagsSet = new HashSet<String>(); // tage集合 ，tage用 "||" 分割
+    private Set<Integer> codeSet = new HashSet<Integer>(); // tage的hashCode。commit匹配时用这个，消费端配置时用 真正的tage
     private long subVersion = System.currentTimeMillis();
     private String expressionType = ExpressionType.TAG;
 

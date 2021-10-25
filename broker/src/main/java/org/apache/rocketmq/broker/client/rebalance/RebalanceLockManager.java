@@ -30,10 +30,10 @@ import org.apache.rocketmq.common.message.MessageQueue;
 public class RebalanceLockManager {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.REBALANCE_LOCK_LOGGER_NAME);
     private final static long REBALANCE_LOCK_MAX_LIVE_TIME = Long.parseLong(System.getProperty(
-        "rocketmq.broker.rebalance.lockMaxLiveTime", "60000"));
+        "rocketmq.broker.rebalance.lockMaxLiveTime", "60000")); // 锁最大存活时间 默认60秒
     private final Lock lock = new ReentrantLock();
     private final ConcurrentMap<String/* group */, ConcurrentHashMap<MessageQueue, LockEntry>> mqLockTable =
-        new ConcurrentHashMap<String, ConcurrentHashMap<MessageQueue, LockEntry>>(1024);
+        new ConcurrentHashMap<String, ConcurrentHashMap<MessageQueue, LockEntry>>(1024); // 锁容器，以消息消费组分组，每个消息队列对应一个锁对象，表示当前该消息队列被消费组中哪个消费者所持有
 
     public boolean tryLock(final String group, final MessageQueue mq, final String clientId) {
 
@@ -114,6 +114,7 @@ public class RebalanceLockManager {
         return false;
     }
 
+    // 加锁
     public Set<MessageQueue> tryLockBatch(final String group, final Set<MessageQueue> mqs,
         final String clientId) {
         Set<MessageQueue> lockedMqs = new HashSet<MessageQueue>(mqs.size());
@@ -127,9 +128,9 @@ public class RebalanceLockManager {
             }
         }
 
-        if (!notLockedMqs.isEmpty()) {
+        if (!notLockedMqs.isEmpty()) { // 存在加锁失败的情况
             try {
-                this.lock.lockInterruptibly();
+                this.lock.lockInterruptibly(); // 可中断的获取锁的过程，当两个线程同时通过lock.lockInterruptibly()获取某个锁时，假若此时线程A获取到了锁，而线程B只有等待，那么对线程B调用threadB.interrupt()方法能够中断线程B的等待过程。
                 try {
                     ConcurrentHashMap<MessageQueue, LockEntry> groupValue = this.mqLockTable.get(group);
                     if (null == groupValue) {
